@@ -33,10 +33,10 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 360px;
-            height: 360px;
+            width: 380px;
+            height: 380px;
             z-index: 1;
-            opacity: 0.25; /* Perfekt ausbalanciert für Spiegelglas */
+            opacity: 0.22; /* Leicht angepasst für optimale Konturen hinter Spiegelfolie */
             pointer-events: none;
         }
 
@@ -86,9 +86,9 @@
             <div id="forecast-box"></div>
         </div>
 
-        <!-- CENTER: NATIVE 3D DAY/NIGHT GLOBE CANVAS -->
+        <!-- CENTER: HIGH-RES DYNAMIC GLOBE CANVAS -->
         <div class="center-globe-container">
-            <canvas id="globeCanvas" width="360" height="360"></canvas>
+            <canvas id="globeCanvas" width="380" height="380"></canvas>
         </div>
 
         <!-- BOTTOM LEFT: TRANSIT BOARD -->
@@ -234,74 +234,80 @@
         setInterval(updateQuote, 7200000);
         updateQuote();
 
-        // 5. Native High-Performance Matrix Globe (100% Local & Failproof)
+        // 5. High-Accuracy Vector Coordinates for Distinct Continents
+        const worldPolygons = [
+            // Europa & Asien (Scharfe Details für Iberische Halbinsel, Italien, Skandinavien, Asien)
+            [[0,65],[10,68],[25,71],[30,68],[35,60],[25,50],[15,55],[20,40],[12,43],[5,36],[-9,36],[-9,43],[-5,50],[-5,60],[0,65]],
+            [[35,60],[60,65],[90,70],[120,75],[160,70],[170,60],[140,50],[120,30],[105,20],[80,10],[60,15],[45,10],[35,15],[30,30],[35,45],[35,60]],
+            [[105,20],[120,22],[130,35],[140,35],[130,10],[110,10],[105,20]], // Südostasien / Indochina
+            // Afrika (Exakte charakteristische Form)
+            [[-17,32],[10,37],[32,31],[34,27],[43,12],[51,11],[40,-5],[38,-15],[20,-34],[15,-34],[8,-5],[4,5],[-10,5],[-15,12],[-17,32]],
+            // Nordamerika (Scharfe Konturen für Alaska, Kanada, USA, Mexiko)
+            [[-165,65],[-150,70],[-120,70],[-80,75],[-60,60],[-55,50],[-65,45],[-80,25],[-90,15],[-100,20],[-110,23],[-115,33],[-125,48],[-140,60],[-165,65]],
+            // Südamerika
+            [[-80,10],[-70,10],[-50,-5],[-35,-7],[-40,-20],[-60,-40],[-70,-55],[-75,-50],[-72,-30],[-80,-15],[-82,-5],[-80,10]],
+            // Australien
+            [[113,-22],[115,-14],[130,-12],[142,-11],[153,-28],[150,-38],[140,-37],[115,-34],[113,-22]],
+            // Grönland
+            [[-50,80],[-30,80],[-20,75],[-40,60],[-50,65],[-60,75],[-50,80]]
+        ];
+
         const canvas = document.getElementById('globeCanvas');
         const ctx = canvas.getContext('2d');
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
         const r = cx - 10;
 
-        // Vektor-Koordinaten-Cluster für die vereinfachten Kontinente (Breitengrad, Längengrad)
-        const landMasses = [
-            // Europa & Asien
-            { lat: 55, lon: 10, w: 50, h: 25 }, { lat: 60, lon: 60, w: 70, h: 20 }, { lat: 35, lon: 105, w: 45, h: 25 },
-            // Afrika
-            { lat: 10, lon: 20, w: 35, h: 40 }, { lat: 25, lon: 25, w: 40, h: 15 },
-            // Nordamerika
-            { lat: 45, lon: -100, w: 55, h: 30 }, { lat: 65, lon: -110, w: 40, h: 15 },
-            // Südamerika
-            { lat: -15, lon: -60, w: 25, h: 45 },
-            // Australien
-            { lat: -25, lon: 135, w: 30, h: 20 }
-        ];
-
         function drawGlobe() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Basis-Silhouette der Erde zeichnen
+            // 1. Deep Space Ozean-Hintergrund
             ctx.beginPath();
             ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-            ctx.fillStyle = '#0a0a0a';
+            ctx.fillStyle = '#080808';
             ctx.fill();
-            ctx.strokeStyle = '#222';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#252525';
+            ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // Berechne die aktuelle Erdrotation basierend auf der UTC-Uhrzeit (Sonnen-Perspektive)
+            // Rotationsberechnung (Sonnen-Perspektive)
             const now = new Date();
             const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60;
-            // 0 Uhr UTC bedeutet, dass Längengrad 180 auf der Rückseite liegt.
             const rotationAngle = (utcHours * 15) * (Math.PI / 180) - Math.PI;
 
-            // 2. Kontinente auf die Kugel projizieren
-            ctx.fillStyle = '#555';
-            landMasses.forEach(m => {
-                for (let la = m.lat - m.h/2; la <= m.lat + m.h/2; la += 3) {
-                    for (let lo = m.lon - m.w/2; lo <= m.lon + m.w/2; lo += 3) {
-                        
-                        // Rotationsmatrix auf den Längengrad anwenden
-                        const radLat = la * (Math.PI / 180);
-                        const radLon = lo * (Math.PI / 180) + rotationAngle;
+            // 2. Vektor-Polygone rendern
+            ctx.fillStyle = '#888888'; // Erhöhter Kontrast für gestochen scharfe Konturen
+            
+            worldPolygons.forEach(polygon => {
+                ctx.beginPath();
+                let first = true;
 
-                        // 3D zu 2D Orthografische Transformation
-                        const x = r * Math.cos(radLat) * Math.sin(radLon);
-                        const y = -r * Math.sin(radLat);
-                        const z = r * Math.cos(radLat) * Math.cos(radLon);
+                polygon.forEach(pt => {
+                    const lat = pt[1] * (Math.PI / 180);
+                    const lon = pt[0] * (Math.PI / 180) + rotationAngle;
 
-                        // Wenn z > 0, befindet sich der Punkt auf der der Sonne zugewandten Seite (sichtbar)
-                        if (z > 0) {
-                            ctx.beginPath();
-                            ctx.arc(cx + x, cy + y, 1.8, 0, 2 * Math.PI);
-                            ctx.fill();
+                    // Mathematische 3D Orthographic Projektion
+                    const x = r * Math.cos(lat) * Math.sin(lon);
+                    const y = -r * Math.sin(lat);
+                    const z = r * Math.cos(lat) * Math.cos(lon);
+
+                    // Nur zeichnen, wenn der Punkt auf der sichtbaren Halbkugel liegt
+                    if (z > 0) {
+                        if (first) {
+                            ctx.moveTo(cx + x, cy + y);
+                            first = false;
+                        } else {
+                            ctx.lineTo(cx + x, cy + y);
                         }
                     }
-                }
+                });
+                ctx.fill();
             });
 
-            // 3. Sonnenlicht-Vignette (Mitte taghell, Ränder gleiten perfekt in den Schatten der Nacht)
-            const shadowGrad = ctx.createRadialGradient(cx, cy, r * 0.65, cx, cy, r);
+            // 3. Solar-Terminator (Weiche Licht-Schatten-Kante am Kugelrand)
+            const shadowGrad = ctx.createRadialGradient(cx, cy, r * 0.70, cx, cy, r);
             shadowGrad.addColorStop(0, 'rgba(0,0,0,0)');
-            shadowGrad.addColorStop(1, 'rgba(0,0,0,0.98)');
+            shadowGrad.addColorStop(1, 'rgba(0,0,0,1)');
 
             ctx.beginPath();
             ctx.arc(cx, cy, r, 0, 2 * Math.PI);
@@ -309,7 +315,7 @@
             ctx.fill();
         }
 
-        // Rendert die Kugel flüssig alle 30 Sekunden neu, um der Erddrehung zu folgen
+        // Alle 30 Sekunden updaten, damit die Kontinente flüssig wandern
         setInterval(drawGlobe, 30000);
         drawGlobe();
     </script>
