@@ -23,6 +23,7 @@
         .top-left { grid-column: 1; grid-row: 1; align-self: start; justify-self: start; }
         .top-right { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; text-align: right; }
         .bottom-left { grid-column: 1; grid-row: 2; align-self: end; justify-self: start; }
+        .bottom-right { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; text-align: right; }
         
         /* Clock Styling */
         #time { font-size: 4.5rem; font-weight: 300; margin-bottom: 5px; }
@@ -36,8 +37,11 @@
         /* Transit Styling */
         .transit-header { font-size: 1.3rem; letter-spacing: 1px; color: #999; text-transform: uppercase; margin-bottom: 10px; font-weight: 600; }
         .transit-table { border-collapse: collapse; font-size: 1.2rem; }
+        .top-right .transit-table { margin-left: auto; } /* Align right table elements */
         .transit-row { border-bottom: 1px solid #222; }
-        .transit-row td { padding: 8px 15px 8px 0; }
+        .transit-row td { padding: 8px 15px; }
+        .bottom-left .transit-row td:first-child { padding-left: 0; }
+        .bottom-right .transit-row td:last-child { padding-right: 0; text-align: right; }
         .line-badge { background: #333; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
         .time-cell { color: #28a745; font-weight: 500; }
         .delay-text { color: #dc3545; font-size: 0.9rem; margin-left: 5px; }
@@ -59,10 +63,18 @@
             <div id="forecast-box"></div>
         </div>
 
-        <!-- BOTTOM LEFT: TRANSIT BOARD -->
+        <!-- BOTTOM LEFT: TRANSIT BOARD (TOWARD DAVOS PLATZ / WIESEN) -->
         <div class="bottom-left">
-            <div class="transit-header">Abfahrten: Dischmastrasse</div>
-            <table class="transit-table" id="transit-board">
+            <div class="transit-header">Abfahrten Richtung Davos Platz</div>
+            <table class="transit-table" id="transit-board-platz">
+                <!-- Data injected dynamically -->
+            </table>
+        </div>
+
+        <!-- BOTTOM RIGHT: NEW TRANSIT BOARD (TOWARD BAHNHOF DORF) -->
+        <div class="bottom-right">
+            <div class="transit-header">Abfahrten Richtung Bahnhof Dorf</div>
+            <table class="transit-table" id="transit-board-dorf">
                 <!-- Data injected dynamically -->
             </table>
         </div>
@@ -110,52 +122,58 @@
         setInterval(fetchWeather, 600000);
         fetchWeather();
 
-        // 3. Live Swiss Transport Departures (Strict "Davos-Only" Target Filter)
+        // 3. Dual Live Swiss Transport Departures
         async function fetchTransit() {
             try {
-                // Fetch a wider pool to make sure we filter out the loops correctly
                 const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf,+Dischmastrasse&limit=30');
                 const data = await res.json();
-                let tableHTML = '';
-                let matchingCount = 0;
+                
+                let platzHTML = '';
+                let dorfHTML = '';
+                let platzCount = 0;
+                let dorfCount = 0;
 
                 if (data.stationboard && data.stationboard.length > 0) {
-                    for (let dep of data.stationboard) {
-                        if (matchingCount >= 5) break; 
-
+                    data.stationboard.forEach(dep => {
                         const destination = dep.to.toLowerCase().trim();
+                        const depTime = new Date(dep.stop.departure);
+                        const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
                         
-                        // Strict Inclusion: Only allow routes heading explicitly to Davos destinations
-                        // This prevents any accidental leaking of Saas, Klosters, or Landquart variations.
-                        if (destination.startsWith('davos')) {
-                            const depTime = new Date(dep.stop.departure);
-                            const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-                            
-                            let delayHTML = '';
-                            if (dep.stop.prognosis && dep.stop.prognosis.delay) {
-                                delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
-                            }
-
-                            tableHTML += `
-                                <tr class="transit-row">
-                                    <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
-                                    <td style="min-width: 180px;">${dep.to}</td>
-                                    <td class="time-cell">${formattedTime}${delayHTML}</td>
-                                </tr>
-                            `;
-                            matchingCount++;
+                        let delayHTML = '';
+                        if (dep.stop.prognosis && dep.stop.prognosis.delay) {
+                            delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
                         }
-                    }
+
+                        const rowTemplate = `
+                            <tr class="transit-row">
+                                <td><span class="line-badge">${dep.number}</span></td>
+                                <td style="min-width: 160px;">${dep.to}</td>
+                                <td class="time-cell">${formattedTime}${delayHTML}</td>
+                            </tr>
+                        `;
+
+                        // Filter Board 1: Toward Davos Platz, Spital, Wiesen
+                        if (destination.startsWith('davos') && !destination.includes('dorf') && platzCount < 4) {
+                            platzHTML += rowTemplate;
+                            platzCount++;
+                        }
+                        
+                        // Filter Board 2: Toward Davos Dorf, Bahnhof (or loops returning via Dorf)
+                        if (destination.includes('davos dorf') && dorfCount < 4) {
+                            dorfHTML += rowTemplate;
+                            dorfCount++;
+                        }
+                    });
                 }
                 
-                if(tableHTML === '') {
-                    tableHTML = '<tr><td style="color:#aaa;">Keine Abfahrten Richtung Davos</td></tr>';
-                }
+                document.getElementById('transit-board-platz').innerHTML = platzHTML || '<tr><td style="color:#aaa;">Keine Abfahrten</td></tr>';
+                document.getElementById('transit-board-dorf').innerHTML = dorfHTML || '<tr><td style="color:#aaa;">Keine Abfahrten</td></tr>';
                 
-                document.getElementById('transit-board').innerHTML = tableHTML;
             } catch (e) { 
                 console.error("Transit error", e); 
-                document.getElementById('transit-board').innerHTML = '<tr><td style="color:#dc3545;">Verbindungsfehler</td></tr>';
+                const errorRow = '<tr><td style="color:#dc3545;">Verbindungsfehler</td></tr>';
+                document.getElementById('transit-board-platz').innerHTML = errorRow;
+                document.getElementById('transit-board-dorf').innerHTML = errorRow;
             }
         }
         setInterval(fetchTransit, 30000);
