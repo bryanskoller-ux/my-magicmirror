@@ -52,14 +52,14 @@
             <div id="date">Donnerstag, 1. Januar</div>
         </div>
 
-        <!-- TOP RIGHT: WEATHER (5-DAY UPDATED) -->
+        <!-- TOP RIGHT: WEATHER (5-DAY) -->
         <div class="top-right">
             <div id="weather-temp">--°C</div>
             <div id="weather-desc">Lade Wetter...</div>
             <div id="forecast-box"></div>
         </div>
 
-        <!-- BOTTOM LEFT: CORRECTED TRANSIT FILTER -->
+        <!-- BOTTOM LEFT: TRANSIT BOARD -->
         <div class="bottom-left">
             <div class="transit-header">Abfahrten: Dischmastrasse</div>
             <table class="transit-table" id="transit-board">
@@ -81,7 +81,7 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 2. Free Davos Weather (5-Day Forecast Configured)
+        // 2. Free Davos Weather (5-Day Forecast)
         async function fetchWeather() {
             try {
                 const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=46.8066&longitude=9.8427&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin');
@@ -97,7 +97,6 @@
                 document.getElementById('weather-temp').innerText = Math.round(data.current.temperature_2m) + '°C';
                 document.getElementById('weather-desc').innerText = weatherMap[data.current.weather_code] || 'Heiter';
 
-                // Render out 5 full upcoming forecast days instead of 3
                 let forecastHTML = '';
                 for(let i=1; i<=5; i++) {
                     const dayName = new Date(data.daily.time[i]).toLocaleDateString('de-CH', { weekday: 'short' });
@@ -111,21 +110,23 @@
         setInterval(fetchWeather, 600000);
         fetchWeather();
 
-        // 3. Live Swiss Transport Departures (Target Route Filtering)
+        // 3. Live Swiss Transport Departures (Filtered for Schatzalpbahn direction)
         async function fetchTransit() {
             try {
-                // Queries the baseline station location directly
-                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos,Dischmastrasse&limit=15');
+                // Increased limit to 20 to ensure we capture enough valid departures
+                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos,Dischmastrasse&limit=20');
                 const data = await res.json();
                 let tableHTML = '';
                 let matchingCount = 0;
 
                 for (let dep of data.stationboard) {
-                    if (matchingCount >= 5) break; // Limits UI to 5 visible lines
+                    if (matchingCount >= 5) break; 
 
-                    // Target check: monitors if route direction flows through Schatzalpbahn
                     const destination = dep.to.toLowerCase();
-                    if (destination.includes('schatzalpbahn') || destination.includes('postplatz') || destination.includes('platz')) {
+                    
+                    // Exclude the wrong directions entirely (Klosters, Saas, Laret, Landquart)
+                    if (!destination.includes('klosters') && !destination.includes('saas') && !destination.includes('laret') && !destination.includes('landquart')) {
+                        
                         const depTime = new Date(dep.stop.departure);
                         const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
                         
