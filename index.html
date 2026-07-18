@@ -110,34 +110,46 @@
         setInterval(fetchWeather, 600000);
         fetchWeather();
 
-        // 3. Live Swiss Transport Departures (Corrected Query String)
+        // 3. Live Swiss Transport Departures (Strict "Davos-Only" Target Filter)
         async function fetchTransit() {
             try {
-                // Fixed station name parameter format to match the backend exactly
-                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf,+Dischmastrasse&limit=6');
+                // Fetch a wider pool to make sure we filter out the loops correctly
+                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf,+Dischmastrasse&limit=30');
                 const data = await res.json();
                 let tableHTML = '';
+                let matchingCount = 0;
 
                 if (data.stationboard && data.stationboard.length > 0) {
-                    data.stationboard.forEach(dep => {
-                        const depTime = new Date(dep.stop.departure);
-                        const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-                        
-                        let delayHTML = '';
-                        if (dep.stop.prognosis && dep.stop.prognosis.delay) {
-                            delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
-                        }
+                    for (let dep of data.stationboard) {
+                        if (matchingCount >= 5) break; 
 
-                        tableHTML += `
-                            <tr class="transit-row">
-                                <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
-                                <td style="min-width: 180px;">${dep.to}</td>
-                                <td class="time-cell">${formattedTime}${delayHTML}</td>
-                            </tr>
-                        `;
-                    });
-                } else {
-                    tableHTML = '<tr><td style="color:#aaa;">Keine Abfahrten gefunden</td></tr>';
+                        const destination = dep.to.toLowerCase().trim();
+                        
+                        // Strict Inclusion: Only allow routes heading explicitly to Davos destinations
+                        // This prevents any accidental leaking of Saas, Klosters, or Landquart variations.
+                        if (destination.startsWith('davos')) {
+                            const depTime = new Date(dep.stop.departure);
+                            const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                            
+                            let delayHTML = '';
+                            if (dep.stop.prognosis && dep.stop.prognosis.delay) {
+                                delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
+                            }
+
+                            tableHTML += `
+                                <tr class="transit-row">
+                                    <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
+                                    <td style="min-width: 180px;">${dep.to}</td>
+                                    <td class="time-cell">${formattedTime}${delayHTML}</td>
+                                </tr>
+                            `;
+                            matchingCount++;
+                        }
+                    }
+                }
+                
+                if(tableHTML === '') {
+                    tableHTML = '<tr><td style="color:#aaa;">Keine Abfahrten Richtung Davos</td></tr>';
                 }
                 
                 document.getElementById('transit-board').innerHTML = tableHTML;
