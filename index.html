@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Mirror Dashboard</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 40px;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+            height: calc(100vh - 80px);
+        }
+        .top-left { grid-column: 1; grid-row: 1; align-self: start; justify-self: start; }
+        .top-right { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; text-align: right; }
+        .bottom-left { grid-column: 1; grid-row: 2; align-self: end; justify-self: start; }
+        
+        /* Clock Styling */
+        #time { font-size: 4.5rem; font-weight: 300; margin-bottom: 5px; }
+        #date { font-size: 1.5rem; color: #aaa; font-weight: 400; }
+
+        /* Weather Styling */
+        #weather-temp { font-size: 3.5rem; font-weight: 300; }
+        #weather-desc { font-size: 1.2rem; color: #aaa; margin-top: -5px; margin-bottom: 15px; }
+        .forecast-row { font-size: 1.1rem; margin-bottom: 4px; color: #eee; }
+
+        /* Transit Styling */
+        .transit-header { font-size: 1.3rem; letter-spacing: 1px; color: #999; text-transform: uppercase; margin-bottom: 10px; font-weight: 600; }
+        .transit-table { border-collapse: collapse; font-size: 1.2rem; }
+        .transit-row { border-bottom: 1px solid #222; }
+        .transit-row td { padding: 8px 15px 8px 0; }
+        .line-badge { background: #333; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+        .time-cell { color: #28a745; font-weight: 500; }
+        .delay-text { color: #dc3545; font-size: 0.9rem; margin-left: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- TOP LEFT: CLOCK -->
+        <div class="top-left">
+            <div id="time">00:00</div>
+            <div id="date">Donnerstag, 1. Januar</div>
+        </div>
+
+        <!-- TOP RIGHT: WEATHER -->
+        <div class="top-right">
+            <div id="weather-temp">--°C</div>
+            <div id="weather-desc">Lade Wetter...</div>
+            <div id="forecast-box"></div>
+        </div>
+
+        <!-- BOTTOM LEFT: SWISS BUS & TRAIN DEPARTURES -->
+        <div class="bottom-left">
+            <div class="transit-header">Abfahrten: Davos Dorf</div>
+            <table class="transit-table" id="transit-board">
+                <!-- Data injected dynamically -->
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 1. Live Clock System
+        function updateClock() {
+            const now = new Date();
+            const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+            const dateOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+            
+            document.getElementById('time').innerText = now.toLocaleTimeString('de-CH', timeOptions);
+            document.getElementById('date').innerText = now.toLocaleDateString('de-CH', dateOptions);
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 2. Free Davos Weather (Open-Meteo)
+        async function fetchWeather() {
+            try {
+                const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=46.8066&longitude=9.8427&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin');
+                const data = await res.json();
+                
+                const weatherMap = {
+                    0: 'Klarer Himmel', 1: 'Vorwiegend klar', 2: 'Teils bewölkt', 3: 'Bewölkt',
+                    45: 'Nebel', 48: 'Reifnebel', 51: 'Leichter Nieselregen', 53: 'Nieselregen',
+                    61: 'Leichter Regen', 63: 'Regen', 71: 'Leichter Schneefall', 73: 'Schneefall',
+                    75: 'Starker Schneefall', 80: 'Regenschauer', 95: 'Gewitter'
+                };
+
+                document.getElementById('weather-temp').innerText = Math.round(data.current.temperature_2m) + '°C';
+                document.getElementById('weather-desc').innerText = weatherMap[data.current.weather_code] || 'Heiter';
+
+                // Forecast mapping
+                let forecastHTML = '';
+                for(let i=1; i<=3; i++) {
+                    const dayName = new Date(data.daily.time[i]).toLocaleDateString('de-CH', { weekday: 'short' });
+                    const max = Math.round(data.daily.temperature_2m_max[i]);
+                    const min = Math.round(data.daily.temperature_2m_min[i]);
+                    forecastHTML += `<div class="forecast-row"><strong>${dayName}:</strong> ${max}° / ${min}°C</div>`;
+                }
+                document.getElementById('forecast-box').innerHTML = forecastHTML;
+            } catch (e) { console.error("Weather error", e); }
+        }
+        setInterval(fetchWeather, 600000);
+        fetchWeather();
+
+        // 3. Live Swiss Transport Departures (Free Opendata.ch)
+        async function fetchTransit() {
+            try {
+                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf&limit=6');
+                const data = await res.json();
+                let tableHTML = '';
+
+                data.stationboard.forEach(dep => {
+                    const depTime = new Date(dep.stop.departure);
+                    const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                    
+                    // Track delays if present
+                    let delayHTML = '';
+                    if (dep.stop.prognosis && dep.stop.prognosis.delay) {
+                        delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
+                    }
+
+                    tableHTML += `
+                        <tr class="transit-row">
+                            <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
+                            <td style="min-width: 180px;">${dep.to}</td>
+                            <td class="time-cell">${formattedTime}${delayHTML}</td>
+                        </tr>
+                    `;
+                });
+                document.getElementById('transit-board').innerHTML = tableHTML;
+            } catch (e) { console.error("Transit error", e); }
+        }
+        setInterval(fetchTransit, 30000);
+        fetchTransit();
+    </script>
+</body>
+</html>
