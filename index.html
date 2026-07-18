@@ -52,16 +52,16 @@
             <div id="date">Donnerstag, 1. Januar</div>
         </div>
 
-        <!-- TOP RIGHT: WEATHER -->
+        <!-- TOP RIGHT: WEATHER (5-DAY UPDATED) -->
         <div class="top-right">
             <div id="weather-temp">--°C</div>
             <div id="weather-desc">Lade Wetter...</div>
             <div id="forecast-box"></div>
         </div>
 
-        <!-- BOTTOM LEFT: SWISS BUS & TRAIN DEPARTURES -->
+        <!-- BOTTOM LEFT: CORRECTED TRANSIT FILTER -->
         <div class="bottom-left">
-            <div class="transit-header">Abfahrten: Davos Dorf</div>
+            <div class="transit-header">Abfahrten: Dischmastrasse</div>
             <table class="transit-table" id="transit-board">
                 <!-- Data injected dynamically -->
             </table>
@@ -81,7 +81,7 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 2. Free Davos Weather (Open-Meteo)
+        // 2. Free Davos Weather (5-Day Forecast Configured)
         async function fetchWeather() {
             try {
                 const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=46.8066&longitude=9.8427&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin');
@@ -97,9 +97,9 @@
                 document.getElementById('weather-temp').innerText = Math.round(data.current.temperature_2m) + '°C';
                 document.getElementById('weather-desc').innerText = weatherMap[data.current.weather_code] || 'Heiter';
 
-                // Forecast mapping
+                // Render out 5 full upcoming forecast days instead of 3
                 let forecastHTML = '';
-                for(let i=1; i<=3; i++) {
+                for(let i=1; i<=5; i++) {
                     const dayName = new Date(data.daily.time[i]).toLocaleDateString('de-CH', { weekday: 'short' });
                     const max = Math.round(data.daily.temperature_2m_max[i]);
                     const min = Math.round(data.daily.temperature_2m_min[i]);
@@ -111,31 +111,43 @@
         setInterval(fetchWeather, 600000);
         fetchWeather();
 
-        // 3. Live Swiss Transport Departures (Free Opendata.ch)
+        // 3. Live Swiss Transport Departures (Target Route Filtering)
         async function fetchTransit() {
             try {
-                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf&limit=6');
+                // Queries the baseline station location directly
+                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos,Dischmastrasse&limit=15');
                 const data = await res.json();
                 let tableHTML = '';
+                let matchingCount = 0;
 
-                data.stationboard.forEach(dep => {
-                    const depTime = new Date(dep.stop.departure);
-                    const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-                    
-                    // Track delays if present
-                    let delayHTML = '';
-                    if (dep.stop.prognosis && dep.stop.prognosis.delay) {
-                        delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
+                for (let dep of data.stationboard) {
+                    if (matchingCount >= 5) break; // Limits UI to 5 visible lines
+
+                    // Target check: monitors if route direction flows through Schatzalpbahn
+                    const destination = dep.to.toLowerCase();
+                    if (destination.includes('schatzalpbahn') || destination.includes('postplatz') || destination.includes('platz')) {
+                        const depTime = new Date(dep.stop.departure);
+                        const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                        
+                        let delayHTML = '';
+                        if (dep.stop.prognosis && dep.stop.prognosis.delay) {
+                            delayHTML = `<span class="delay-text">+${dep.stop.prognosis.delay}'</span>`;
+                        }
+
+                        tableHTML += `
+                            <tr class="transit-row">
+                                <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
+                                <td style="min-width: 180px;">${dep.to}</td>
+                                <td class="time-cell">${formattedTime}${delayHTML}</td>
+                            </tr>
+                        `;
+                        matchingCount++;
                     }
-
-                    tableHTML += `
-                        <tr class="transit-row">
-                            <td style="width: 70px;"><span class="line-badge">${dep.number}</span></td>
-                            <td style="min-width: 180px;">${dep.to}</td>
-                            <td class="time-cell">${formattedTime}${delayHTML}</td>
-                        </tr>
-                    `;
-                });
+                }
+                
+                if(tableHTML === '') {
+                    tableHTML = '<tr><td style="color:#aaa;">Keine Fahrten aktuell</td></tr>';
+                }
                 document.getElementById('transit-board').innerHTML = tableHTML;
             } catch (e) { console.error("Transit error", e); }
         }
