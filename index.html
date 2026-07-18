@@ -36,7 +36,7 @@
             width: 380px;
             height: 380px;
             z-index: 1;
-            opacity: 0.15; /* Keeps it faint and clean on a smart mirror */
+            opacity: 0.18; /* Leicht erhöht für bessere Sichtbarkeit hinter dem Spiegelglas */
             pointer-events: none;
         }
 
@@ -66,9 +66,8 @@
         /* Quote Styling */
         #quote-text { font-size: 1.1rem; color: #666; max-width: 600px; font-style: italic; line-height: 1.4; }
     </style>
-    <!-- Include D3.js and TopoJSON libraries for smooth vector drawing -->
+    <!-- D3.js für die mathematische 3D-Orthographic-Projektion -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 </head>
 <body>
 
@@ -89,7 +88,7 @@
             <div id="forecast-box"></div>
         </div>
 
-        <!-- CENTER DEAD SPACE: LIVE DYNAMIC GLOBE -->
+        <!-- CENTER: LIVE GLOBE -->
         <div class="center-globe-container">
             <svg id="globe" width="380" height="380"></svg>
         </div>
@@ -237,28 +236,34 @@
         setInterval(updateQuote, 7200000);
         updateQuote();
 
-        // 5. High-Performance SVG Orthographic Globe (Views from Sun Perspective)
+        // 5. Hardcoded Local Vector GeoJSON data to ensure offline/CORS-proof execution
+        const geoJSONLand = {
+            "type": "FeatureCollection",
+            "features": [
+                { "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [[[10, 5], [20, 10], [30, 20], [25, 35], [15, 45], [5, 40], [-5, 25], [0, 10], [10, 5]]] } }, // Afrika
+                { "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [[[30, 20], [40, 15], [60, 10], [80, 15], [100, 5], [120, 15], [130, 35], [120, 60], [90, 70], [60, 75], [30, 60], [25, 35], [30, 20]]] } }, // Eurasien
+                { "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [[[-100, 20], [-110, 30], [-120, 40], [-130, 50], [-120, 65], [-80, 70], [-60, 60], [-80, 45], [-70, 30], [-90, 15], [-100, 20]]] } }, // Nordamerika
+                { "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [[[-70, 10], [-50, -5], [-40, -10], [-60, -40], [-70, -55], [-75, -45], [-70, -20], [-80, -5], [-70, 10]]] } }, // Südamerika
+                { "type": "Feature", "geometry": { "type": "Polygon", "coordinates": [[[120, -10], [140, -15], [150, -30], [140, -40], [115, -30], [110, -20], [120, -10]]] } } // Australien
+            ]
+        };
+
         const svg = d3.select("#globe");
         const width = +svg.attr("width");
         const height = +svg.attr("height");
         const radius = width / 2;
 
-        // Dynamic Solar Subpoint Positioning calculation based on current time
         function getSolarCoordinates() {
             const now = new Date();
             const startOfYear = new Date(now.getFullYear(), 0, 1);
             const days = (now - startOfYear) / (1000 * 60 * 60 * 24);
-            
-            // Core celestial mechanics approximations
             const declination = 23.45 * Math.sin((2 * Math.PI / 365) * (days - 80));
             const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
             const longitude = 180 - (utcHours * 15);
-            
             return [longitude, declination];
         }
 
         const solarPos = getSolarCoordinates();
-        // Projection fixed exactly on the solar point so the illuminated part is perfectly center-facing
         const projection = d3.geoOrthographic()
             .scale(radius - 5)
             .translate([width / 2, height / 2])
@@ -266,36 +271,33 @@
 
         const path = d3.geoPath().projection(projection);
 
-        // Define a smooth gradient filter for the shadows
         const defs = svg.append("defs");
         const shadowGrad = defs.append("radialGradient")
             .attr("id", "shadow-gradient")
             .attr("cx", "50%").attr("cy", "50%").attr("r", "50%");
-        shadowGrad.append("stop").offset("70%").attr("stop-color", "#000").attr("stop-opacity", 0);
+        shadowGrad.append("stop").offset("75%").attr("stop-color", "#000").attr("stop-opacity", 0);
         shadowGrad.append("stop").offset("100%").attr("stop-color", "#000").attr("stop-opacity", 0.95);
 
-        // Base planetary silhouette
+        // Weltkugel Silhouette Basis
         svg.append("circle")
             .attr("cx", width / 2).attr("cy", height / 2).attr("r", radius - 5)
-            .attr("fill", "#111").attr("stroke", "#333").attr("stroke-width", "1");
+            .attr("fill", "#090909").attr("stroke", "#222").attr("stroke-width", "1");
 
-        // Load performance-optimized TopoJSON base world dataset directly
-        d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json").then(world => {
-            const land = topojson.feature(world, world.objects.land);
+        // Zeichne lokale Landmassen direkt
+        svg.append("g")
+            .selectAll("path")
+            .data(geoJSONLand.features)
+            .enter()
+            .append("path")
+            .attr("d", path)
+            .attr("fill", "#444");
 
-            // Draw underlying landmass vector paths
-            svg.append("path")
-                .datum(land)
-                .attr("d", path)
-                .attr("fill", "#555");
+        // Schatten-Overlay (Tag/Nacht Grenze simuliert aus der Sonnenperspektive)
+        svg.append("circle")
+            .attr("cx", width / 2).attr("cy", height / 2).attr("r", radius - 5)
+            .attr("fill", "url(#shadow-gradient)");
 
-            // Drop atmospheric shading envelope
-            svg.append("circle")
-                .attr("cx", width / 2).attr("cy", height / 2).attr("r", radius - 5)
-                .attr("fill", "url(#shadow-gradient)");
-        });
-
-        // Slow updates every 5 minutes to adjust earth curvature to sun coordinates
+        // Positions-Update alle 5 Minuten
         setInterval(() => {
             const newPos = getSolarCoordinates();
             projection.rotate([-newPos[0], -newPos[1]]);
