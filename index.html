@@ -110,23 +110,16 @@
         setInterval(fetchWeather, 600000);
         fetchWeather();
 
-        // 3. Live Swiss Transport Departures (Filtered for Schatzalpbahn direction)
+        // 3. Live Swiss Transport Departures (Corrected Query String)
         async function fetchTransit() {
             try {
-                // Increased limit to 20 to ensure we capture enough valid departures
-                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos,Dischmastrasse&limit=20');
+                // Fixed station name parameter format to match the backend exactly
+                const res = await fetch('https://transport.opendata.ch/v1/stationboard?station=Davos+Dorf,+Dischmastrasse&limit=6');
                 const data = await res.json();
                 let tableHTML = '';
-                let matchingCount = 0;
 
-                for (let dep of data.stationboard) {
-                    if (matchingCount >= 5) break; 
-
-                    const destination = dep.to.toLowerCase();
-                    
-                    // Exclude the wrong directions entirely (Klosters, Saas, Laret, Landquart)
-                    if (!destination.includes('klosters') && !destination.includes('saas') && !destination.includes('laret') && !destination.includes('landquart')) {
-                        
+                if (data.stationboard && data.stationboard.length > 0) {
+                    data.stationboard.forEach(dep => {
                         const depTime = new Date(dep.stop.departure);
                         const formattedTime = depTime.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
                         
@@ -142,15 +135,16 @@
                                 <td class="time-cell">${formattedTime}${delayHTML}</td>
                             </tr>
                         `;
-                        matchingCount++;
-                    }
+                    });
+                } else {
+                    tableHTML = '<tr><td style="color:#aaa;">Keine Abfahrten gefunden</td></tr>';
                 }
                 
-                if(tableHTML === '') {
-                    tableHTML = '<tr><td style="color:#aaa;">Keine Fahrten aktuell</td></tr>';
-                }
                 document.getElementById('transit-board').innerHTML = tableHTML;
-            } catch (e) { console.error("Transit error", e); }
+            } catch (e) { 
+                console.error("Transit error", e); 
+                document.getElementById('transit-board').innerHTML = '<tr><td style="color:#dc3545;">Verbindungsfehler</td></tr>';
+            }
         }
         setInterval(fetchTransit, 30000);
         fetchTransit();
