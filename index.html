@@ -17,7 +17,7 @@
         .container {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr;
+            grid-template-rows: auto 1fr auto; /* Added a row row for the quote */
             height: calc(100vh - 80px);
         }
         .top-left { grid-column: 1; grid-row: 1; align-self: start; justify-self: start; }
@@ -25,19 +25,24 @@
         .bottom-left { grid-column: 1; grid-row: 2; align-self: end; justify-self: start; }
         .bottom-right { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; text-align: right; }
         
+        /* Center bottom row for the quote */
+        .bottom-center { grid-column: 1 / span 2; grid-row: 3; align-self: end; justify-self: center; text-align: center; margin-top: 20px; }
+
         /* Clock Styling */
         #time { font-size: 4.5rem; font-weight: 300; margin-bottom: 5px; }
         #date { font-size: 1.5rem; color: #aaa; font-weight: 400; }
 
         /* Weather Styling */
+        .weather-main { display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
+        #weather-icon { font-size: 3.5rem; }
         #weather-temp { font-size: 3.5rem; font-weight: 300; }
-        #weather-desc { font-size: 1.2rem; color: #aaa; margin-top: -5px; margin-bottom: 15px; }
+        #weather-desc { font-size: 1.2rem; color: #aaa; margin-top: 0px; margin-bottom: 15px; }
         .forecast-row { font-size: 1.1rem; margin-bottom: 4px; color: #eee; }
 
         /* Transit Styling */
         .transit-header { font-size: 1.3rem; letter-spacing: 1px; color: #999; text-transform: uppercase; margin-bottom: 10px; font-weight: 600; }
         .transit-table { border-collapse: collapse; font-size: 1.2rem; }
-        .top-right .transit-table { margin-left: auto; } /* Align right table elements */
+        .top-right .transit-table { margin-left: auto; }
         .transit-row { border-bottom: 1px solid #222; }
         .transit-row td { padding: 8px 15px; }
         .bottom-left .transit-row td:first-child { padding-left: 0; }
@@ -45,6 +50,9 @@
         .line-badge { background: #333; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
         .time-cell { color: #28a745; font-weight: 500; }
         .delay-text { color: #dc3545; font-size: 0.9rem; margin-left: 5px; }
+
+        /* Quote Styling */
+        #quote-text { font-size: 1.1rem; italic; color: #666; max-width: 600px; font-style: italic; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -56,9 +64,12 @@
             <div id="date">Donnerstag, 1. Januar</div>
         </div>
 
-        <!-- TOP RIGHT: WEATHER (5-DAY) -->
+        <!-- TOP RIGHT: WEATHER (5-DAY) WITH ICON -->
         <div class="top-right">
-            <div id="weather-temp">--°C</div>
+            <div class="weather-main">
+                <span id="weather-icon"></span>
+                <span id="weather-temp">--°C</span>
+            </div>
             <div id="weather-desc">Lade Wetter...</div>
             <div id="forecast-box"></div>
         </div>
@@ -71,12 +82,17 @@
             </table>
         </div>
 
-        <!-- BOTTOM RIGHT: NEW TRANSIT BOARD (TOWARD BAHNHOF DORF) -->
+        <!-- BOTTOM RIGHT: TRANSIT BOARD (TOWARD BAHNHOF DORF) -->
         <div class="bottom-right">
             <div class="transit-header">Abfahrten Richtung Bahnhof Dorf</div>
             <table class="transit-table" id="transit-board-dorf">
                 <!-- Data injected dynamically -->
             </table>
+        </div>
+
+        <!-- BOTTOM CENTER: MINIMALIST QUOTE -->
+        <div class="bottom-center">
+            <div id="quote-text">"Lade Inspiration..."</div>
         </div>
     </div>
 
@@ -93,7 +109,7 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 2. Free Davos Weather (5-Day Forecast)
+        // 2. Free Davos Weather (5-Day Forecast) with Dynamic Icons
         async function fetchWeather() {
             try {
                 const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=46.8066&longitude=9.8427&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin');
@@ -106,6 +122,18 @@
                     75: 'Starker Schneefall', 80: 'Regenschauer', 95: 'Gewitter'
                 };
 
+                // Map weather codes to clean, display-friendly icons
+                function getIcon(code) {
+                    if (code === 0 || code === 1) return '☀️';
+                    if (code === 2 || code === 3) return '☁️';
+                    if ([45, 48].includes(code)) return '🌫️';
+                    if ([51, 53, 61, 63, 80].includes(code)) return '🌧️';
+                    if ([71, 73, 75].includes(code)) return '❄️';
+                    if (code === 95) return '⛈️';
+                    return '🌤️';
+                }
+
+                document.getElementById('weather-icon').innerText = getIcon(data.current.weather_code);
                 document.getElementById('weather-temp').innerText = Math.round(data.current.temperature_2m) + '°C';
                 document.getElementById('weather-desc').innerText = weatherMap[data.current.weather_code] || 'Heiter';
 
@@ -114,7 +142,8 @@
                     const dayName = new Date(data.daily.time[i]).toLocaleDateString('de-CH', { weekday: 'short' });
                     const max = Math.round(data.daily.temperature_2m_max[i]);
                     const min = Math.round(data.daily.temperature_2m_min[i]);
-                    forecastHTML += `<div class="forecast-row"><strong>${dayName}:</strong> ${max}° / ${min}°C</div>`;
+                    const dailyIcon = getIcon(data.daily.weather_code[i]);
+                    forecastHTML += `<div class="forecast-row"><strong>${dayName}:</strong> ${dailyIcon} ${max}° / ${min}°C</div>`;
                 }
                 document.getElementById('forecast-box').innerHTML = forecastHTML;
             } catch (e) { console.error("Weather error", e); }
@@ -152,13 +181,11 @@
                             </tr>
                         `;
 
-                        // Filter Board 1: Toward Davos Platz, Spital, Wiesen
                         if (destination.startsWith('davos') && !destination.includes('dorf') && platzCount < 4) {
                             platzHTML += rowTemplate;
                             platzCount++;
                         }
                         
-                        // Filter Board 2: Toward Davos Dorf, Bahnhof (or loops returning via Dorf)
                         if (destination.includes('davos dorf') && dorfCount < 4) {
                             dorfHTML += rowTemplate;
                             dorfCount++;
@@ -178,6 +205,24 @@
         }
         setInterval(fetchTransit, 30000);
         fetchTransit();
+
+        // 4. Rotating Minimalist Quotes System
+        const quotes = [
+            '"Die beste Zeit für einen Neuanfang ist jetzt."',
+            '"Fokus liegt nicht darin, Dinge zu tun, sondern das Wesentliche zu tun."',
+            '"Es kommt nicht darauf an, wie langsam du gehst, solange du nicht stehen bleibst."',
+            '"Einfachheit ist die höchste Stufe der Vollendung."',
+            '"Qualität bedeutet, etwas ordentlich zu erledigen, auch wenn niemand hinsieht."',
+            '"Der Weg ist das Ziel."'
+        ];
+        
+        function updateQuote() {
+            const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+            document.getElementById('quote-text').innerText = randomQuote;
+        }
+        // Change quote every 2 hours to keep it fresh without being distracting
+        setInterval(updateQuote, 7200000);
+        updateQuote();
     </script>
 </body>
 </html>
