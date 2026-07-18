@@ -17,16 +17,28 @@
         .container {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr auto; /* Added a row row for the quote */
+            grid-template-rows: auto 1fr auto;
             height: calc(100vh - 80px);
+            position: relative;
         }
-        .top-left { grid-column: 1; grid-row: 1; align-self: start; justify-self: start; }
-        .top-right { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; text-align: right; }
-        .bottom-left { grid-column: 1; grid-row: 2; align-self: end; justify-self: start; }
-        .bottom-right { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; text-align: right; }
-        
-        /* Center bottom row for the quote */
-        .bottom-center { grid-column: 1 / span 2; grid-row: 3; align-self: end; justify-self: center; text-align: center; margin-top: 20px; }
+        .top-left { grid-column: 1; grid-row: 1; align-self: start; justify-self: start; z-index: 2; }
+        .top-right { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; text-align: right; z-index: 2; }
+        .bottom-left { grid-column: 1; grid-row: 2; align-self: end; justify-self: start; z-index: 2; }
+        .bottom-right { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; text-align: right; z-index: 2; }
+        .bottom-center { grid-column: 1 / span 2; grid-row: 3; align-self: end; justify-self: center; text-align: center; margin-top: 20px; z-index: 2; }
+
+        /* Dead Center Container for the Live Globe */
+        .center-globe-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 380px;
+            height: 380px;
+            z-index: 1;
+            opacity: 0.15; /* Keeps it faint and clean on a smart mirror */
+            pointer-events: none;
+        }
 
         /* Clock Styling */
         #time { font-size: 4.5rem; font-weight: 300; margin-bottom: 5px; }
@@ -52,8 +64,11 @@
         .delay-text { color: #dc3545; font-size: 0.9rem; margin-left: 5px; }
 
         /* Quote Styling */
-        #quote-text { font-size: 1.1rem; italic; color: #666; max-width: 600px; font-style: italic; line-height: 1.4; }
+        #quote-text { font-size: 1.1rem; color: #666; max-width: 600px; font-style: italic; line-height: 1.4; }
     </style>
+    <!-- Include D3.js and TopoJSON libraries for smooth vector drawing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 </head>
 <body>
 
@@ -64,7 +79,7 @@
             <div id="date">Donnerstag, 1. Januar</div>
         </div>
 
-        <!-- TOP RIGHT: WEATHER (5-DAY) WITH ICON -->
+        <!-- TOP RIGHT: WEATHER -->
         <div class="top-right">
             <div class="weather-main">
                 <span id="weather-icon"></span>
@@ -74,20 +89,21 @@
             <div id="forecast-box"></div>
         </div>
 
-        <!-- BOTTOM LEFT: TRANSIT BOARD (TOWARD DAVOS PLATZ / WIESEN) -->
-        <div class="bottom-left">
-            <div class="transit-header">Abfahrten Richtung Davos Platz</div>
-            <table class="transit-table" id="transit-board-platz">
-                <!-- Data injected dynamically -->
-            </table>
+        <!-- CENTER DEAD SPACE: LIVE DYNAMIC GLOBE -->
+        <div class="center-globe-container">
+            <svg id="globe" width="380" height="380"></svg>
         </div>
 
-        <!-- BOTTOM RIGHT: TRANSIT BOARD (TOWARD BAHNHOF DORF) -->
+        <!-- BOTTOM LEFT: TRANSIT BOARD -->
+        <div class="bottom-left">
+            <div class="transit-header">Abfahrten Richtung Davos Platz</div>
+            <table class="transit-table" id="transit-board-platz"></table>
+        </div>
+
+        <!-- BOTTOM RIGHT: TRANSIT BOARD -->
         <div class="bottom-right">
             <div class="transit-header">Abfahrten Richtung Bahnhof Dorf</div>
-            <table class="transit-table" id="transit-board-dorf">
-                <!-- Data injected dynamically -->
-            </table>
+            <table class="transit-table" id="transit-board-dorf"></table>
         </div>
 
         <!-- BOTTOM CENTER: MINIMALIST QUOTE -->
@@ -109,7 +125,7 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 2. Free Davos Weather (5-Day Forecast) with Dynamic Icons
+        // 2. Free Davos Weather (5-Day Forecast)
         async function fetchWeather() {
             try {
                 const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=46.8066&longitude=9.8427&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin');
@@ -122,7 +138,6 @@
                     75: 'Starker Schneefall', 80: 'Regenschauer', 95: 'Gewitter'
                 };
 
-                // Map weather codes to clean, display-friendly icons
                 function getIcon(code) {
                     if (code === 0 || code === 1) return '☀️';
                     if (code === 2 || code === 3) return '☁️';
@@ -206,7 +221,7 @@
         setInterval(fetchTransit, 30000);
         fetchTransit();
 
-        // 4. Rotating Minimalist Quotes System
+        // 4. Rotating Quotes
         const quotes = [
             '"Die beste Zeit für einen Neuanfang ist jetzt."',
             '"Fokus liegt nicht darin, Dinge zu tun, sondern das Wesentliche zu tun."',
@@ -215,14 +230,77 @@
             '"Qualität bedeutet, etwas ordentlich zu erledigen, auch wenn niemand hinsieht."',
             '"Der Weg ist das Ziel."'
         ];
-        
         function updateQuote() {
             const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
             document.getElementById('quote-text').innerText = randomQuote;
         }
-        // Change quote every 2 hours to keep it fresh without being distracting
         setInterval(updateQuote, 7200000);
         updateQuote();
+
+        // 5. High-Performance SVG Orthographic Globe (Views from Sun Perspective)
+        const svg = d3.select("#globe");
+        const width = +svg.attr("width");
+        const height = +svg.attr("height");
+        const radius = width / 2;
+
+        // Dynamic Solar Subpoint Positioning calculation based on current time
+        function getSolarCoordinates() {
+            const now = new Date();
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const days = (now - startOfYear) / (1000 * 60 * 60 * 24);
+            
+            // Core celestial mechanics approximations
+            const declination = 23.45 * Math.sin((2 * Math.PI / 365) * (days - 80));
+            const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+            const longitude = 180 - (utcHours * 15);
+            
+            return [longitude, declination];
+        }
+
+        const solarPos = getSolarCoordinates();
+        // Projection fixed exactly on the solar point so the illuminated part is perfectly center-facing
+        const projection = d3.geoOrthographic()
+            .scale(radius - 5)
+            .translate([width / 2, height / 2])
+            .rotate([-solarPos[0], -solarPos[1]]);
+
+        const path = d3.geoPath().projection(projection);
+
+        // Define a smooth gradient filter for the shadows
+        const defs = svg.append("defs");
+        const shadowGrad = defs.append("radialGradient")
+            .attr("id", "shadow-gradient")
+            .attr("cx", "50%").attr("cy", "50%").attr("r", "50%");
+        shadowGrad.append("stop").offset("70%").attr("stop-color", "#000").attr("stop-opacity", 0);
+        shadowGrad.append("stop").offset("100%").attr("stop-color", "#000").attr("stop-opacity", 0.95);
+
+        // Base planetary silhouette
+        svg.append("circle")
+            .attr("cx", width / 2).attr("cy", height / 2).attr("r", radius - 5)
+            .attr("fill", "#111").attr("stroke", "#333").attr("stroke-width", "1");
+
+        // Load performance-optimized TopoJSON base world dataset directly
+        d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json").then(world => {
+            const land = topojson.feature(world, world.objects.land);
+
+            // Draw underlying landmass vector paths
+            svg.append("path")
+                .datum(land)
+                .attr("d", path)
+                .attr("fill", "#555");
+
+            // Drop atmospheric shading envelope
+            svg.append("circle")
+                .attr("cx", width / 2).attr("cy", height / 2).attr("r", radius - 5)
+                .attr("fill", "url(#shadow-gradient)");
+        });
+
+        // Slow updates every 5 minutes to adjust earth curvature to sun coordinates
+        setInterval(() => {
+            const newPos = getSolarCoordinates();
+            projection.rotate([-newPos[0], -newPos[1]]);
+            svg.selectAll("path").attr("d", path);
+        }, 300000);
     </script>
 </body>
 </html>
